@@ -1,0 +1,7 @@
+{
+  "name": "Clara - SVIT Receptionist",
+  "description": "AI Receptionist for Sai Vidya Institute of Technology, powered by Gemini Live API.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
