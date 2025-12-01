@@ -15,7 +15,7 @@ const App: React.FC = () => {
   const liveClientRef = useRef<LiveClient | null>(null);
   const requestRef = useRef<number>();
 
-  const API_KEY = process.env.API_KEY || '';
+  const API_KEY = process.env.API_KEY || 'AIzaSyCuq38uItJbMymKm7fBO5Rp9y9ObKAq_-U';
 
   const animate = useCallback(() => {
     if (liveClientRef.current) {
