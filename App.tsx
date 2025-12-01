@@ -1,15 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { LiveClient } from './services/liveClient';
 import RoboFace from './components/RoboFace';
+import LyricsDisplay from './components/LyricsDisplay';
 
 const App: React.FC = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [amplitude, setAmplitude] = useState(0);
+  
+  // Transcription State - Only Input
+  const [currentInput, setCurrentInput] = useState('');
+  const [history, setHistory] = useState<{ text: string; isUser: boolean }[]>([]);
+
   const liveClientRef = useRef<LiveClient | null>(null);
   const requestRef = useRef<number>();
 
-  // Use API Key from environment
   const API_KEY = process.env.API_KEY || '';
 
   const animate = useCallback(() => {
@@ -21,7 +26,6 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // Start animation loop
     requestRef.current = requestAnimationFrame(animate);
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
@@ -31,23 +35,51 @@ const App: React.FC = () => {
     };
   }, [animate]);
 
-  const handleConnect = async () => {
+  const handleToggleConnect = async () => {
+    if (isConnected) {
+      if (liveClientRef.current) {
+        liveClientRef.current.disconnect();
+        liveClientRef.current = null;
+      }
+      setIsConnected(false);
+      setAmplitude(0);
+      setCurrentInput('');
+      return;
+    }
+
     if (!API_KEY) {
-      setError("API Key not found in environment variables.");
+      setError("API Key missing.");
       return;
     }
     
     setError(null);
+    setHistory([]);
     const client = new LiveClient(API_KEY);
     liveClientRef.current = client;
 
     try {
       await client.connect(
+        // On Close
         () => setIsConnected(false),
+        // On Error
         (err) => {
           console.error(err);
           setError(err.message);
           setIsConnected(false);
+        },
+        // On Transcription
+        (text, isUser, isFinal) => {
+           // We only care about user input now
+           if (isUser) {
+             if (isFinal) {
+               if (currentInput) {
+                 setHistory(prev => [...prev, { text: currentInput, isUser: true }]);
+                 setCurrentInput('');
+               }
+             } else {
+               setCurrentInput(prev => text); 
+             }
+           }
         }
       );
       setIsConnected(true);
@@ -56,59 +88,49 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDisconnect = () => {
-    if (liveClientRef.current) {
-      liveClientRef.current.disconnect();
-      liveClientRef.current = null;
-    }
-    setIsConnected(false);
-    setAmplitude(0);
-  };
-
   return (
-    <div className="min-h-screen w-full bg-black flex flex-col items-center justify-center font-mono relative overflow-hidden">
-      {/* Global CRT Scanlines */}
+    <div className="min-h-screen w-full bg-black flex flex-col items-center justify-center font-sans relative overflow-hidden">
+      
+      {/* Scanlines Effect */}
       <div className="scanlines"></div>
 
-      {/* Main Content */}
-      <div className="z-20 flex flex-col items-center gap-8">
-        
-        {/* Branding Removed */}
-
+      {/* Main Content: RoboFace */}
+      <div className="z-20 flex-grow flex flex-col items-center justify-center w-full transform -translate-y-12">
         <RoboFace amplitude={amplitude} isListening={isConnected} />
-
-        {/* Controls */}
-        <div className="flex flex-col items-center gap-4">
-          {!isConnected ? (
-            <button
-              onClick={handleConnect}
-              className="px-8 py-3 bg-green-900/30 border border-green-500 text-green-400 rounded hover:bg-green-500 hover:text-black transition-all duration-300 uppercase tracking-widest text-sm font-bold shadow-[0_0_10px_rgba(34,197,94,0.3)] hover:shadow-[0_0_20px_#22c55e]"
-            >
-              INITIALIZE RECEPTIONIST
-            </button>
-          ) : (
-            <button
-              onClick={handleDisconnect}
-              className="px-8 py-3 bg-red-900/30 border border-red-500 text-red-400 rounded hover:bg-red-500 hover:text-black transition-all duration-300 uppercase tracking-widest text-sm font-bold shadow-[0_0_10px_rgba(239,68,68,0.3)] hover:shadow-[0_0_20px_#ef4444]"
-            >
-              TERMINATE SESSION
-            </button>
-          )}
-
-          {error && (
-            <div className="text-red-500 text-xs mt-4 max-w-xs text-center border border-red-900/50 p-2 bg-red-950/20">
-              ERR: {error}
-            </div>
-          )}
-        </div>
       </div>
 
-      {/* Footer / Status Log */}
-      <div className="absolute bottom-4 left-4 z-20 text-green-900/60 text-[10px] leading-tight select-none pointer-events-none">
-        <p>SYSTEM: CLARA_SVIT_V3.0</p>
-        <p>KERNEL: GEMINI_LIVE_NATIVE</p>
-        <p>AUDIO_MOD: ZEPHYR</p>
-        <p>STATUS: {isConnected ? 'ONLINE' : 'OFFLINE'}</p>
+      {/* Footer / Controls Layer */}
+      <div className="z-30 absolute bottom-12 flex flex-col items-center justify-end w-full space-y-6">
+        
+        {/* Initialize Button - Restored Style */}
+        <button
+            onClick={handleToggleConnect}
+            className={`px-8 py-3 border border-green-500 text-green-500 font-mono text-sm tracking-[0.2em] uppercase hover:bg-green-500/10 transition-all duration-300 ${isConnected ? 'bg-green-500/10 shadow-[0_0_15px_rgba(34,197,94,0.4)]' : ''}`}
+          >
+            {isConnected ? "Terminate Session" : "Initialize Receptionist"}
+        </button>
+
+        {/* Lyrics / Transcription Display (Input Only) */}
+        <div className="h-24 w-full flex justify-center">
+           <LyricsDisplay 
+             currentInput={currentInput} 
+             history={history} 
+           />
+        </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="absolute top-0 text-red-500/80 text-xs tracking-wide bg-red-950/30 px-4 py-2 rounded border border-red-500/20">
+            {error}
+          </div>
+        )}
+      </div>
+
+      {/* System Info Bottom Left */}
+      <div className="absolute bottom-4 left-6 z-10 text-white/10 text-[9px] font-mono leading-tight pointer-events-none hidden md:block">
+        <div>SYS: CLARA_SVIT_V5.0</div>
+        <div>KER: GEMINI_LIVE_NATIVE</div>
+        <div>AUD: ZEPHYR</div>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 interface RoboFaceProps {
-  amplitude: number; // 0.0 to 1.0 (Robot speaking volume)
+  amplitude: number; // 0.0 to 1.0
   isListening: boolean;
 }
 
@@ -27,10 +27,9 @@ const RoboFace: React.FC<RoboFaceProps> = ({ amplitude, isListening }) => {
   }, []);
 
   // -- Mouth Logic --
-  // Keep mouth opening subtle and small as requested
-  // Reduced multiplier significantly
-  const mouthHeight = Math.max(4, amplitude * 20); // Was 40, reduced to 20 for "little small"
-  const mouthWidth = 150 + (amplitude * 10);
+  // Mouth opens slightly based on amplitude
+  const mouthHeight = Math.max(4, amplitude * 40); 
+  const mouthWidth = 100 + (amplitude * 20);
 
   // -- Eye Logic --
   const isSpeaking = amplitude > 0.05;
@@ -39,53 +38,42 @@ const RoboFace: React.FC<RoboFaceProps> = ({ amplitude, isListening }) => {
   let scaleX = 1;
 
   if (isBlinking) {
-    scaleY = 0.1; // Close eyes (blink)
-    scaleX = 1.1; // Slight squash width
+    scaleY = 0.1; // Close eyes
+    scaleX = 1.1; // Squash
   } else if (isSpeaking) {
-    // "Emotive" shape when speaking:
-    // Stretch Y slightly to look "engaged" or "wide-eyed"
-    // Squash X slightly to maintain mass
-    scaleY = 1 + (amplitude * 0.4); 
-    scaleX = 1 - (amplitude * 0.1);
+    // Emotive shape when speaking
+    scaleY = 1 + (amplitude * 0.3); 
+    scaleX = 0.95;
   }
 
-  // Smooth transitions for organic feel
   const eyeStyle: React.CSSProperties = {
     transform: `scale(${scaleX}, ${scaleY})`,
   };
   
-  // rounded-3xl softens the square vertices
-  const eyeClasses = `w-24 h-24 bg-green-500 shadow-[0_0_25px_#22c55e] rounded-3xl transition-transform duration-100 ease-in-out`;
+  // Rounded square eyes (Green)
+  const eyeClasses = `w-20 h-20 bg-green-500 shadow-[0_0_20px_#22c55e] rounded-2xl transition-transform duration-100 ease-in-out`;
 
-  // Fade out slightly when not connected/listening
-  const containerOpacity = isListening ? 'opacity-100' : 'opacity-60';
+  const opacityClass = isListening ? 'opacity-100' : 'opacity-50';
 
   return (
-    <div className="relative w-full h-[500px] flex flex-col items-center justify-center bg-black overflow-hidden">
+    // Added responsive scaling: md:scale-150 (Tablets) and lg:scale-[2.5] (Laptops/Desktops)
+    <div className={`relative flex flex-col items-center justify-center transition-all duration-500 transform scale-100 md:scale-150 lg:scale-[2.5] ${opacityClass}`}>
       
       {/* Eyes Container */}
-      <div className={`flex justify-center gap-16 w-full mb-16 relative z-10 transition-opacity duration-500 ${containerOpacity}`}>
-        {/* Left Eye */}
+      <div className="flex justify-center gap-12 mb-12">
         <div className={eyeClasses} style={eyeStyle}></div>
-        {/* Right Eye */}
         <div className={eyeClasses} style={eyeStyle}></div>
       </div>
 
       {/* Mouth Container */}
-      <div className={`h-32 flex items-center justify-center w-full relative z-10 transition-opacity duration-500 ${containerOpacity}`}>
-        {/* Rounded mouth edges to match smoother eyes */}
+      <div className="h-20 flex items-center justify-center">
         <div 
-          className="bg-green-500 shadow-[0_0_25px_#22c55e] transition-all duration-75 ease-out rounded-lg"
+          className="bg-green-500 shadow-[0_0_20px_#22c55e] transition-all duration-75 ease-out rounded-full"
           style={{
             height: `${mouthHeight}px`,
             width: `${mouthWidth}px`
           }}
         ></div>
-      </div>
-
-      {/* Status Text */}
-      <div className="absolute bottom-10 text-green-800 text-xs font-mono tracking-[0.5em]">
-        {isListening ? "LISTENING..." : "STANDBY"}
       </div>
     </div>
   );

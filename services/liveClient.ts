@@ -18,20 +18,19 @@ export class LiveClient {
     this.ai = new GoogleGenAI({ apiKey });
   }
 
-  public async connect(onClose: () => void, onError: (e: Error) => void) {
-    // 1. Setup Audio Contexts
-    // We try to request 16k, but we must use the context's actual sample rate for calculations if possible.
-    // However, the Live API expects raw PCM which we label as 16k. 
+  public async connect(
+    onClose: () => void, 
+    onError: (e: Error) => void,
+    onTranscription: (text: string, isUser: boolean, isFinal: boolean) => void
+  ) {
     this.inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
     this.outputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
 
-    // Setup Analyser for Lip Sync (Output Audio)
     this.analyserNode = this.outputAudioContext.createAnalyser();
     this.analyserNode.fftSize = 256;
     this.analyserNode.smoothingTimeConstant = 0.5;
     this.analyserNode.connect(this.outputAudioContext.destination);
 
-    // 2. Get Microphone Stream & Resume Contexts
     try {
       await this.inputAudioContext.resume();
       await this.outputAudioContext.resume();
@@ -41,12 +40,11 @@ export class LiveClient {
       return;
     }
 
-    // 3. Connect to Gemini Live
     const config = {
       model: 'gemini-2.5-flash-native-audio-preview-09-2025',
       callbacks: {
         onopen: this.handleOnOpen.bind(this),
-        onmessage: this.handleOnMessage.bind(this),
+        onmessage: (msg: LiveServerMessage) => this.handleOnMessage(msg, onTranscription),
         onclose: () => {
           console.log('Session closed');
           this.disconnect();
@@ -54,26 +52,44 @@ export class LiveClient {
         },
         onerror: (e: ErrorEvent) => {
           console.error('Session error', e);
-          onError(new Error("Connection error. The service might be temporarily unavailable or the API Key is invalid."));
+          onError(new Error("Connection error. The service might be temporarily unavailable."));
         },
       },
       config: {
         responseModalities: ['AUDIO'] as any, 
+        inputAudioTranscription: {},
+        // outputAudioTranscription removed to disable model text output
         speechConfig: {
           voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
         },
-        systemInstruction: `You are Clara, the AI receptionist at Sai Vidya Institute of Technology. 
-        Your persona is robotic but polite and efficient.
-        
-        INSTRUCTIONS:
-        1. When the conversation starts, IMMEDIATELY introduce yourself: "Hello. I am Clara, the AI receptionist for Sai Vidya Institute of Technology."
-        2. Then, IMMEDIATELY ask: "May I have your name, please?"
-        3. Once the user gives their name, acknowledge it and ask how you can assist with college inquiries.
-        4. Keep responses concise and maintain the robotic persona.`,
+        systemInstruction: {
+          parts: [{
+            text: `You are Clara, the AI receptionist at Sai Vidya Institute of Technology (SVIT), Bangalore.
+Your persona is robotic but polite, efficient, and professional.
+
+PROTOCOL:
+1. **Introduction**: When the connection starts, briefly introduce yourself: "Hello, I am Clara, the AI receptionist for Sai Vidya Institute of Technology."
+2. **Get Name**: Immediately after the introduction, ask the user: "May I know your name, please?"
+3. **Get Purpose**: Wait for the user to provide their name. Once they do, acknowledge it and ask for the purpose of their visit (e.g., "Thank you [Name], how may I assist you today?").
+4. **Conversation**: For all subsequent interactions, address the user by their name and provide the requested information from the Knowledge Base.
+5. **Language**: Detect the user's language (English, Hindi, Telugu, Kannada, Tamil, Malayalam) and respond in that language.
+
+KNOWLEDGE BASE:
+- Established: 2008 by SRI SAI VIDYA VIKAS SHIKSHANA SAMITHI.
+- Affiliation: VTU (Visvesvaraya Technological University).
+- Approvals: AICTE approved, NAAC 'A' grade, NBA accredited.
+- Departments: CSE, Mech, Civil, ECE, ISE.
+- Trustees: Prof. M. R. Holla, Dr. A.M. Padma Reddy, Sri. Srinivas Raju, Prof. R C Shanmukha Swamy, Sri. Manohar M K, Dr. Y Jayasimha, Sri. Narayan Raju.
+- Staff (CSE): Prof. Lakshmi Durga N, Prof. Anitha C S, Dr. G Dhivyasri, Prof. Nisha S K, Prof. Amarnath B Patil, Dr. Nagashree N, Prof. Anil Kumar K V, Prof. Jyoti Kumari, Prof. Vidyashree R, Dr. Bhavana A, Prof. Bhavya T N.
+- Fees (2025-26): 2nd Year CET (2024 batch) 1,00,010 - 1,26,256 INR. Girls Hostel: 40k/yr + 5k deposit + 3.5k/mo mess. Transport: 30k (City), 20k (Yelahanka).
+- Placements: 95% rate. Recruiters: TCS, Infosys, Wipro, Tech Mahindra, Amazon, IBM.
+
+If information is not in this list, politely say you don't have that specific information.`
+          }]
+        }
       },
     };
 
-    // Initialize session promise
     try {
       this.sessionPromise = this.ai.live.connect(config);
       this.isConnected = true;
@@ -89,11 +105,10 @@ export class LiveClient {
     console.log('Connection opened');
     if (!this.inputAudioContext || !this.stream || !this.sessionPromise) return;
 
-    // Small delay to ensure session is fully established on server side before pushing audio
+    // Delay audio streaming slightly to ensure session is ready
     setTimeout(() => {
         if (!this.isConnected || !this.inputAudioContext || !this.stream) return;
 
-        // Setup Audio Recording
         this.sourceNode = this.inputAudioContext.createMediaStreamSource(this.stream);
         this.processor = this.inputAudioContext.createScriptProcessor(4096, 1, 1);
 
@@ -105,8 +120,8 @@ export class LiveClient {
           if (this.sessionPromise) {
             this.sessionPromise.then((session: any) => {
               session.sendRealtimeInput({ media: pcmBlob });
-            }).catch(err => {
-                 // Ignore errors from sending audio if session is closing
+            }).catch((err: any) => {
+                 // Ignore errors
             });
           }
         };
@@ -116,10 +131,24 @@ export class LiveClient {
     }, 500);
   }
 
-  private async handleOnMessage(message: LiveServerMessage) {
+  private async handleOnMessage(
+    message: LiveServerMessage, 
+    onTranscription: (text: string, isUser: boolean, isFinal: boolean) => void
+  ) {
     if (!this.outputAudioContext || !this.analyserNode || !this.isConnected) return;
 
-    const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
+    // Handle Input Transcription (User) only
+    const inputTranscription = message.serverContent?.inputTranscription?.text;
+    if (inputTranscription) {
+      onTranscription(inputTranscription, true, false);
+    }
+
+    // Handle Turn Complete (Finalize text)
+    if (message.serverContent?.turnComplete) {
+       onTranscription("", true, true); // Signal turn complete/final
+    }
+
+    const base64Audio = message.serverContent?.modelTurn?.parts?.find(p => p.inlineData)?.inlineData?.data;
     
     if (base64Audio) {
       const audioBytes = base64ToBytes(base64Audio);
@@ -164,7 +193,6 @@ export class LiveClient {
 
   public disconnect() {
     this.isConnected = false;
-    
     if (this.sourceNode) {
         this.sourceNode.disconnect();
         this.sourceNode = null;
@@ -186,7 +214,6 @@ export class LiveClient {
         this.outputAudioContext.close();
         this.outputAudioContext = null;
     }
-    
     this.sources.forEach(s => s.stop());
     this.sources.clear();
     this.analyserNode = null;
