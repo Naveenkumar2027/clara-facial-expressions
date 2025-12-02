@@ -1,4 +1,4 @@
-import { GoogleGenAI, LiveServerMessage } from '@google/genai';
+import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { base64ToBytes, createPcmBlob, decodeAudioData } from '../utils/audioUtils';
 
 export class LiveClient {
@@ -56,7 +56,7 @@ export class LiveClient {
         },
       },
       config: {
-        responseModalities: ['AUDIO'] as any, 
+        responseModalities: [Modality.AUDIO], 
         inputAudioTranscription: {},
         // outputAudioTranscription removed to disable model text output
         speechConfig: {

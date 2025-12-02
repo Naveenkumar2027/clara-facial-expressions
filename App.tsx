@@ -13,9 +13,9 @@ const App: React.FC = () => {
   const [history, setHistory] = useState<{ text: string; isUser: boolean }[]>([]);
 
   const liveClientRef = useRef<LiveClient | null>(null);
-  const requestRef = useRef<number>();
+  const requestRef = useRef<number>(0);
 
-  const API_KEY = process.env.API_KEY || 'AIzaSyCuq38uItJbMymKm7fBO5Rp9y9ObKAq_-U';
+  const API_KEY = process.env.API_KEY;
 
   const animate = useCallback(() => {
     if (liveClientRef.current) {
