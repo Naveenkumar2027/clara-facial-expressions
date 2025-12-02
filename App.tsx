@@ -14,6 +14,7 @@ const App: React.FC = () => {
 
   const liveClientRef = useRef<LiveClient | null>(null);
   const requestRef = useRef<number>(0);
+  const currentInputRef = useRef<string>('');
 
   const API_KEY = process.env.API_KEY;
 
@@ -44,6 +45,7 @@ const App: React.FC = () => {
       setIsConnected(false);
       setAmplitude(0);
       setCurrentInput('');
+      currentInputRef.current = '';
       return;
     }
 
@@ -54,6 +56,8 @@ const App: React.FC = () => {
     
     setError(null);
     setHistory([]);
+    setCurrentInput('');
+    currentInputRef.current = '';
     const client = new LiveClient(API_KEY);
     liveClientRef.current = client;
 
@@ -72,12 +76,17 @@ const App: React.FC = () => {
            // We only care about user input now
            if (isUser) {
              if (isFinal) {
-               if (currentInput) {
-                 setHistory(prev => [...prev, { text: currentInput, isUser: true }]);
-                 setCurrentInput('');
+               // When final, save the current accumulated input to history
+               const finalText = currentInputRef.current;
+               if (finalText) {
+                 setHistory((prev: { text: string; isUser: boolean }[]) => [...prev, { text: finalText, isUser: true }]);
                }
+               setCurrentInput('');
+               currentInputRef.current = '';
              } else {
-               setCurrentInput(prev => text); 
+               // Update current input with incremental transcription
+               setCurrentInput(text);
+               currentInputRef.current = text;
              }
            }
         }
