@@ -28,12 +28,16 @@ export function useVoiceAnalyser(enabled: boolean) {
       sourceRef.current = source;
       source.connect(analyser);
       const bufferLength = analyser.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
+      // Use explicit ArrayBuffer so types satisfy getByteTimeDomainData (ArrayBuffer vs ArrayBufferLike)
+      const dataArray = new Uint8Array(new ArrayBuffer(bufferLength));
       dataArrayRef.current = dataArray;
 
       const tick = () => {
         if (!analyserRef.current || !dataArrayRef.current) return;
-        analyserRef.current.getByteTimeDomainData(dataArrayRef.current);
+        // TS DOM lib uses Uint8Array<ArrayBuffer>; runtime is compatible
+        analyserRef.current.getByteTimeDomainData(
+          dataArrayRef.current as unknown as Uint8Array<ArrayBuffer>
+        );
         let sum = 0;
         for (let i = 0; i < dataArrayRef.current.length; i++) {
           const v = (dataArrayRef.current[i] - 128) / 128;

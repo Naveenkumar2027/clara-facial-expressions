@@ -1,15 +1,53 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 
+// Web Speech API types (not in all TypeScript DOM libs)
+interface SpeechRecognitionResult {
+  readonly length: number;
+  readonly isFinal: boolean;
+  item(index: number): SpeechRecognitionAlternative;
+  [index: number]: SpeechRecognitionAlternative;
+}
+interface SpeechRecognitionAlternative {
+  readonly transcript: string;
+  readonly confidence: number;
+}
+interface SpeechRecognitionResultList {
+  readonly length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+interface SpeechRecognitionEvent extends Event {
+  readonly resultIndex: number;
+  readonly results: SpeechRecognitionResultList;
+}
+interface SpeechRecognitionErrorEvent extends Event {
+  readonly error: string;
+  readonly message: string;
+}
+interface SpeechRecognitionInstance extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onstart: (() => void) | null;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+  start(): void;
+  stop(): void;
+  abort(): void;
+}
+type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
+
 declare global {
   interface Window {
-    SpeechRecognition: typeof SpeechRecognition;
-    webkitSpeechRecognition: typeof SpeechRecognition;
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
   }
 }
 
-const SpeechRecognitionAPI =
+const SpeechRecognitionAPI: SpeechRecognitionConstructor | null =
   typeof window !== 'undefined'
-    ? window.SpeechRecognition || window.webkitSpeechRecognition
+    ? (window.SpeechRecognition || window.webkitSpeechRecognition) ?? null
     : null;
 
 export type SpeechRecognitionState = 'idle' | 'listening' | 'processing';
@@ -33,7 +71,7 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
 
   const [state, setState] = useState<SpeechRecognitionState>('idle');
   const [transcript, setTranscript] = useState('');
-  const recognitionRef = useRef<InstanceType<typeof SpeechRecognition> | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
   const start = useCallback(() => {
     if (!SpeechRecognitionAPI) {
@@ -42,7 +80,9 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
     }
     if (state === 'listening') return;
 
-    const recognition = new SpeechRecognitionAPI();
+    const api = SpeechRecognitionAPI;
+    if (!api) return;
+    const recognition = new api();
     recognition.continuous = continuous;
     recognition.interimResults = interimResults;
     recognition.lang = language;
