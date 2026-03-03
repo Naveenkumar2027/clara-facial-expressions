@@ -7,7 +7,7 @@ const App: React.FC = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [amplitude, setAmplitude] = useState(0);
-  
+
   // Transcription State - Only Input
   const [currentInput, setCurrentInput] = useState('');
   const [history, setHistory] = useState<{ text: string; isUser: boolean }[]>([]);
